@@ -6,6 +6,8 @@ import random
 import numpy as np
 
 from utils import get_module_logger
+from random import shuffle
+import shutil
 
 
 def split(data_dir):
@@ -19,6 +21,16 @@ def split(data_dir):
     
     # TODO: Split the data present in `/home/workspace/data/waymo/training_and_validation` into train and val sets.
     # You should move the files rather than copy because of space limitations in the workspace.
+
+    presplit_files = glob.glob(data_dir + '/training_and_validation/*.tfrecord')
+    os.makedirs(os.path.abspath(data_dir + "/train", exist_ok=True))
+    os.makedirs(os.path.abspath(data_dir + "/val", exist_ok=True))
+
+    # Split to 90% train, 10% val
+    cutoff = len(presplit_files)/10 + 1
+
+
+
 
 if __name__ == "__main__": 
     parser = argparse.ArgumentParser(description='Split data into training / validation / testing')
