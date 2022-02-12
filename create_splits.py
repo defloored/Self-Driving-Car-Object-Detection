@@ -22,12 +22,17 @@ def split(data_dir):
     # TODO: Split the data present in `/home/workspace/data/waymo/training_and_validation` into train and val sets.
     # You should move the files rather than copy because of space limitations in the workspace.
 
-    presplit_files = glob.glob(data_dir + '/training_and_validation/*.tfrecord')
-    os.makedirs(os.path.abspath(data_dir + "/train", exist_ok=True))
-    os.makedirs(os.path.abspath(data_dir + "/val", exist_ok=True))
+    data = glob.glob(data_dir + '/training_and_validation/*.tfrecord')
+    os.makedirs(os.path.abspath(data_dir + "/train"), exist_ok=True)
+    os.makedirs(os.path.abspath(data_dir + "/val"), exist_ok=True)
 
     # Split to 90% train, 10% val
-    cutoff = len(presplit_files)/10 + 1
+    cutoff = len(data)//10 + 1
+    shuffle(data)
+    for data_file in data[:cutoff]:
+        shutil.move(data_file, data_dir + '/val/' + os.path.basename(data_file))
+    for data_file in data[cutoff:]:
+        shutil.move(data_file, data_dir + '/train/' + os.path.basename(data_file))
 
 
 
