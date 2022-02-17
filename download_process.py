@@ -30,7 +30,6 @@ def create_tf_example(filename, encoded_jpeg, annotations, resize=True):
         image = Image.open(encoded_jpg_io)
         width, height = image.size
         width_factor, height_factor = image.size
-        
     else:
         image_tensor = tf.io.decode_jpeg(encoded_jpeg)
         height_factor, width_factor, _ = image_tensor.shape
@@ -118,12 +117,16 @@ def process_tfr(path, data_dir):
     writer = tf.python_io.TFRecordWriter(f'{dest}/{file_name}')
     dataset = tf.data.TFRecordDataset(path, compression_type='')
     for idx, data in enumerate(dataset):
-        frame = open_dataset.Frame()
-        frame.ParseFromString(bytearray(data.numpy()))
-        encoded_jpeg, annotations = parse_frame(frame)
-        filename = file_name.replace('.tfrecord', f'_{idx}.tfrecord')
-        tf_example = create_tf_example(filename, encoded_jpeg, annotations)
-        writer.write(tf_example.SerializeToString())
+        # we are only saving every 10 frames to reduce the number of similar
+        # images. Remove this line if you have enough space to work with full
+        # temporal resolution data.
+        if idx % 10 == 0:
+            frame = open_dataset.Frame()
+            frame.ParseFromString(bytearray(data.numpy()))
+            encoded_jpeg, annotations = parse_frame(frame)
+            filename = file_name.replace('.tfrecord', f'_{idx}.tfrecord')
+            tf_example = create_tf_example(filename, encoded_jpeg, annotations)
+            writer.write(tf_example.SerializeToString())
     writer.close()
 
 
@@ -135,7 +138,7 @@ def download_and_process(filename, data_dir):
     process_tfr(local_path, data_dir)
     # remove the original tf record to save space
     logger.info(f'Deleting {local_path}')
-    # os.remove(local_path)
+    os.remove(local_path)
 
 
 if __name__ == "__main__":
@@ -148,12 +151,12 @@ if __name__ == "__main__":
     args = parser.parse_args()
     data_dir = args.data_dir
     size = args.size
-    
+
     # open the filenames file
     with open('filenames.txt', 'r') as f:
         filenames = f.read().splitlines()
     logger.info(f'Download {len(filenames[:size])} files. Be patient, this will take a long time.')
-    
+
     # init ray
     ray.init(num_cpus=cpu_count())
     workers = [download_and_process.remote(fn, data_dir) for fn in filenames[:size]]
