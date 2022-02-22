@@ -7,7 +7,7 @@ This project demonstrates the use of deep learning libraries to detect specific 
 ![Object Detection](./writeupfiles/intro.png)
 
 We first explore the data and analyze salient features. The data is split for training, evaluation, and testing, making sure that important scenarios are represented in each split. We generate a pipeline configuration for our pretrained model and train it as a reference model. We then explore further augmentations of training data to improve on the reference model performance.
-
+<hr>
 
 ## Set-Up Instructions
 
@@ -33,6 +33,7 @@ pip install pycocotools
 ```
 
 You may have to repeat the above solutions for each training/eval cycle.
+<hr>
 
 ## Data
 
@@ -47,6 +48,7 @@ After the split, save this [pretrained model](http://download.tensorflow.org/mod
 ```sh
 python edit_config.py --train_dir data/train/ --eval_dir data/val/ --batch_size 2 --checkpoint experiments/pretrained_model/ssd_resnet50_v1_fpn_640x640_coco17_tpu-8/checkpoint/ckpt-0 --label_map experiments/label_map.pbtxt
 ```
+<hr>
 
 ## Exploratory Data Analysis
 
@@ -78,6 +80,7 @@ To do this, we can make use of conventional image processing with OpenCV to dete
 ![Classification of night time images](./writeupfiles/nighttime.png)
 
 Here, we see two outliers that were misclassified by our nighttime classifier, one with a huge tree and another under a bridge. Decreasing the threshold should filter them out.
+<hr>
 
 ## Cross Validation
 
@@ -107,68 +110,160 @@ def is_night (batch):
 To perform the split, we group daytime records and nighttime records, and perform the split in each group.
 
 While Udacity's Self-Driving Car course recommends an 80/20 split for cross validation for training/(evaluation/testing), the project backend has behaved erratically with 80/20 and 90/10 splits during evaluation in both the workspace VM and in local machines, and for this reason we opted for a 70/30 split, leaving only the 3 provided tfrecords in the workspace VM for testing.
+<hr>
 
 ## Training
 
-You will now launch your very first experiment with the Tensorflow object detection API. Move the `pipeline_new.config` to the `/home/workspace/experiments/reference` folder. Now launch the training process:
-* a training process:
+## Reference Experiment
+
+The reference experiment is based on our post-split configuration of the pretrained model, the SSD ResNet50 V1 FPN 640x640 (RetinaNet50). The configuration file is [here](./experiments/reference/pipeline_new.config).
+
+The config file uses the following preprocessing data augmentations:
+```sh
+    random_horizontal_flip {
+    }
 ```
-python experiments/model_main_tf2.py --model_dir=experiments/reference/ --pipeline_config_path=experiments/reference/pipeline_new.config
-```
-Once the training is finished, launch the evaluation process:
-* an evaluation process:
-```
-python experiments/model_main_tf2.py --model_dir=experiments/reference/ --pipeline_config_path=experiments/reference/pipeline_new.config --checkpoint_dir=experiments/reference/
-```
-
-**Note**: Both processes will display some Tensorflow warnings, which can be ignored. You may have to kill the evaluation script manually using
-`CTRL+C`.
-
-To monitor the training, you can launch a tensorboard instance by running `python -m tensorboard.main --logdir experiments/reference/`. You will report your findings in the writeup.
-
-### Improve the performances
-
-Most likely, this initial experiment did not yield optimal results. However, you can make multiple changes to the config file to improve this model. One obvious change consists in improving the data augmentation strategy. The [`preprocessor.proto`](https://github.com/tensorflow/models/blob/master/research/object_detection/protos/preprocessor.proto) file contains the different data augmentation method available in the Tf Object Detection API. To help you visualize these augmentations, we are providing a notebook: `Explore augmentations.ipynb`. Using this notebook, try different data augmentation combinations and select the one you think is optimal for our dataset. Justify your choices in the writeup.
-
-Keep in mind that the following are also available:
-* experiment with the optimizer: type of optimizer, learning rate, scheduler etc
-* experiment with the architecture. The Tf Object Detection API [model zoo](https://github.com/tensorflow/models/blob/master/research/object_detection/g3doc/tf2_detection_zoo.md) offers many architectures. Keep in mind that the `pipeline.config` file is unique for each architecture and you will have to edit it.
-
-**Important:** If you are working on the workspace, your storage is limited. You may to delete the checkpoints files after each experiment. You should however keep the `tf.events` files located in the `train` and `eval` folder of your experiments. You can also keep the `saved_model` folder to create your videos.
-
-
-### Creating an animation
-#### Export the trained model
-Modify the arguments of the following function to adjust it to your models:
-
-```
-python experiments/exporter_main_v2.py --input_type image_tensor --pipeline_config_path experiments/reference/pipeline_new.config --trained_checkpoint_dir experiments/reference/ --output_directory experiments/reference/exported/
+```sh
+    random_crop_image {
+      min_object_covered: 0.0
+      min_aspect_ratio: 0.75
+      max_aspect_ratio: 3.0
+      min_area: 0.75
+      max_area: 1.0
+      overlap_thresh: 0.0
+    }
 ```
 
-This should create a new folder `experiments/reference/exported/saved_model`. You can read more about the Tensorflow SavedModel format [here](https://www.tensorflow.org/guide/saved_model).
+Results for loss are as follows:
 
-Finally, you can create a video of your model's inferences for any tf record file. To do so, run the following command (modify it to your files):
+![Reference Loss](./writeupfiles/referenceloss.png)
+
+Results for recall and precision are as follows:
+
+![Reference Dboxes](./writeupfiles/referencedboxes.png)
+
+These results are far from ideal, and advice from course mentors suggest problems in the backend framework. However, we proceed to improve on this model.
+<hr>
+
+## Improve on the Reference
+
+## Exploratory Data Augmentations
+
+For improving the reference model, we explore the following preprocessing options for data augmentation:
+
+1. SSD Random Crop
+Replacing the default random crop option in the reference config with an SSD version might prove useful.
+```sh
+    ssd_random_crop {
+      operations {
+        min_object_covered: 0.0
+        min_aspect_ratio: 0.875
+        max_aspect_ratio: 1.125
+        min_area: 0.5
+        max_area: 1.0
+        overlap_thresh: 0.0
+        clip_boxes: False
+        random_coef: 0.375
+      }
+      operations {
+        min_object_covered: 0.25
+        min_aspect_ratio: 0.75
+        max_aspect_ratio: 1.5
+        min_area: 0.5
+        max_area: 1.0
+        overlap_thresh: 0.25
+        clip_boxes: True
+        random_coef: 0.375
+      }
+    }
 ```
-python inference_video.py --labelmap_path label_map.pbtxt --model_path experiments/reference/exported/saved_model --tf_record_path /data/waymo/testing/segment-12200383401366682847_2552_140_2572_140_with_camera_labels.tfrecord --config_path experiments/reference/pipeline_new.config --output_path animation.gif
+![](./writeupfiles/output1.png)
+
+2. Random Black Patches
+Black patches may allow the model to generalize better with obstructed images.
+```sh
+    random_black_patches {
+      max_black_patches: 20
+      probability: 0.95
+      size_to_image_ratio: 0.12
+    }
 ```
+![](./writeupfiles/output2.png)
 
-## Submission Template
+3. Random JPEG Quality
+Simulating quality variance might help with recording variance.
+```sh
+    random_jpeg_quality {
+      random_coef: 0.5
+      min_jpeg_quality: 70
+      max_jpeg_quality: 90
+    }
+```
+![](./writeupfiles/output3.png)
 
-### Project overview
-This section should contain a brief description of the project and what we are trying to achieve. Why is object detection such an important component of self driving car systems?
+4. Random Image Scale
+Random image scaling might help with distant and close-up objects.
+```sh
+    random_image_scale {
+      min_scale_ratio: 0.8
+      max_scale_ratio: 2.2
+    }
+```
+![](./writeupfiles/output4.png)
 
-### Set up
-This section should contain a brief description of the steps to follow to run the code for this repository.
+5. Random Adjust Brightness
+More brightness variance can help with our lack of night time training data.
+```sh
+    random_adjust_brightness {
+      max_delta: 0.2
+    }
+```
+![](./writeupfiles/output5.png)
+<hr>
 
-### Dataset
-#### Dataset analysis
-This section should contain a quantitative and qualitative description of the dataset. It should include images, charts and other visualizations.
-#### Cross validation
-This section should detail the cross validation strategy and justify your approach.
+## Experiment 0
 
-### Training
-#### Reference experiment
-This section should detail the results of the reference experiment. It should includes training metrics and a detailed explanation of the algorithm's performances.
+For Experiment 0, we use the following data augmentations:
 
-#### Improve on the reference
-This section should highlight the different strategies you adopted to improve your model. It should contain relevant figures and details of your findings.
+1. ssd_random_crop
+2. random_image_scale
+3. random_adjust_brightness
+4. random_jitter_boxes
+5. random_black_patches
+
+We replace the default random crop with the SSD version, and keep the random horizontal flip.
+
+The loss results are as follows:
+
+![](./writeupfiles/experiment0loss.png)
+
+The precision and recall results are as follows:
+
+![](./writeupfiles/experiment0dboxes.png)
+
+Interestingly, the results are arguably worse. But as noted in the reference section and noted by the course mentors, the project environment setup has demonstrated erratic behavior. We now proceed with the next experiment.
+<hr>
+
+## Experiment 1
+
+For Experiment 1, we keep the reference preprocessing, and add the following:
+
+1. random_black_patches
+2. random_jpeg_quality
+3. random_image_scale
+4. random_adjust_brightness
+
+Results for loss are as follows:
+
+![](./writeupfiles/experiment1loss.png)
+
+Results for precision and recall are as follows:
+
+![](./writeupfiles/experiment1dboxes.png)
+
+We finally see improvements over the reference model for loss, precision, and recall.
+<hr>
+
+## Project Reflections
+
+This project, while a great learning experience, was set back by lack of testing of the workspace and Docker environments. I spent much more time trying to make the code run in my local machine than coding and analyzing, as the Docker environment could not run the project. While the workspace VM worked, it was riddled with out of memory errors in both the browser and tensorflow, making it impossible to run jupyter and tensorboard on the browser. Upon further investigation, the workspace VM was using outdated libraries that are no longer online, and I believe this same environment was used to write the project framework. However, the provided Docker file installed different library versions that proved to be incompatible with the project. While I was finally able to configure a local environment to run the project, the results are still rather suspect. In hindsight, it would have been faster and more fruitful to write my own backend to use the updated TensorFlow Object Detection API.
